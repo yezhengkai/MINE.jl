@@ -1,0 +1,7 @@
+name = "MINE"
+uuid = "e9de0c45-d658-4fb4-9543-077149d5dd41"
+authors = ["Zheng-Kai Ye <supon3060@gmail.com> and contributors"]
+version = "0.1.0"
+
+[deps]
+MINE_jll = "2182fe48-6a47-5d59-8418-17df3e319962"
