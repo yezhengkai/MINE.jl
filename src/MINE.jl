@@ -2,6 +2,9 @@ module MINE
 
 using MINE_jll
 
+# TODO: use GC.@preserve?
+export pstats, cstats
+
 const EST_MIC_APPROX = Cint(0)
 const EST_MIC_E = Cint(1)
 
@@ -49,14 +52,16 @@ struct MINEcstats
     m::Cint  # number of cols
 end
 
-
 function mine_check_parameter(mine_parameter::MINEParameter)
-    return ccall(
+    ret_code = ccall(
         (:mine_check_parameter, libmine),
-        Cchar,
+        Cstring,
         (Ptr{MINEParameter},),
         Ref(mine_parameter),
     )
+    if ret_code != C_NULL
+        error(unsafe_string(ret_code))
+    end
 end
 
 function mine_compute_score(mine_problem::MINEProblem, mine_parameter::MINEParameter)::Ptr{MINEScore}
@@ -160,16 +165,13 @@ function mine_gmic(mine_score::Ptr{MINEScore}; p=-1)
 end
 mine_gmic(mine_score, p=-1) = mine_gmic(mine_score; p=p)
 
-# TODO
-function pstats(X; alpha=0.6, c=15, est="mic_approx")
+function pstats(X::Matrix; alpha=0.6, c=15, est="mic_approx")
 
     param = MINEParameter(alpha, c, EST[est])
-    ret = mine_check_parameter(param)
-    if ret != 0
-       error(ret)
-    end
-    Xa = convert(Array, X)
-    Xm = MINEMatrix(pointer(Xa), size(Xa)[1], size(Xa)[2])
+    mine_check_parameter(param)
+
+    Xa = convert(Array, permutedims(X, (2, 1)))
+    Xm = MINEMatrix(pointer(Xa), size(X)...)
 
     pstats_ptr = ccall(
         (:mine_compute_pstats, libmine),
@@ -193,23 +195,19 @@ function pstats(X; alpha=0.6, c=15, est="mic_approx")
     return mic, tic
 end
 
-# TODO
-function cstats(X, Y; alpha=0.6, c=15, est="mic_approx")
+function cstats(X::Matrix, Y::Matrix; alpha=0.6, c=15, est="mic_approx")
 
-    if size(X)[2] != size(X)[2]
+    if size(X)[2] != size(Y)[2]
         error("X, Y: shape mismatch")
     end
 
     param = MINEParameter(alpha, c, EST[est])
-    ret = mine_check_parameter(param)
-    if ret != 0
-       error(ret)
-    end
+    mine_check_parameter(param)
 
-    Xa = convert(Array, X)
-    Ya = convert(Array, Y)
-    Xm = MINEMatrix(pointer(Xa), size(Xa)[1], size(Xa)[2])
-    Ym = MINEMatrix(pointer(Ya), size(Ya)[1], size(Ya)[2])
+    Xa = convert(Array, permutedims(X, (2, 1)))
+    Ya = convert(Array, permutedims(Y, (2, 1)))
+    Xm = MINEMatrix(pointer(Xa), size(X)...)
+    Ym = MINEMatrix(pointer(Ya), size(Y)...)
     cstats_ptr = ccall(
         (:mine_compute_cstats, libmine),
         Ptr{MINEcstats},
@@ -224,8 +222,8 @@ function cstats(X, Y; alpha=0.6, c=15, est="mic_approx")
     tic = Matrix{Float64}(undef, cstats.n, cstats.m)
     for i in range(1, cstats.n)
         for j in range(1, cstats.m)
-            mic[i, j] = unsafe_load(cstats.mic, ((i - 1) * cstats.n) + j)
-            tic[i, j] = unsafe_load(cstats.tic, ((i - 1) * cstats.n) + j)
+            mic[i, j] = unsafe_load(cstats.mic, ((i - 1) * cstats.m) + j)
+            tic[i, j] = unsafe_load(cstats.tic, ((i - 1) * cstats.m) + j)
         end
     end
 
